@@ -1,24 +1,42 @@
+$safeMode = $true
+
 # Import the Active Directory module if not already imported
 Import-Module ActiveDirectory
 
 # Define the root OU
 $OU = "OU=CPS Users,DC=cps,DC=gov,DC=uk"
 
+# Define the OU to exclude
+$ExcludeOU = "OU=Shared Mailbox Accounts,OU=CPS Users,DC=cps,DC=gov,DC=uk"
 
 # Define the cutoff date (2 years ago)
 $CutoffDate = (Get-Date).AddYears(-2)
 
 # Search AD for users in the OU and sub-OUs
-$deletableUsers = Get-ADUser -Filter { msExchRecipientTypeDetails -ne 34359738368 } -SearchBase $OU -SearchScope Subtree -Properties LastLogonDate, whenCreated, whenChanged |
+$deletableUsers = Get-ADUser -Filter * -SearchBase $OU -SearchScope Subtree `
+    -Properties msExchRecipientTypeDetails, LastLogonDate, LastLogonTimestamp, Enabled, whenCreated, whenChanged |
     Where-Object {
+        # Exclude users in the excluded OU
+        ($_.DistinguishedName -notlike "*$ExcludeOU*") -and
         # Some accounts may have never logged in (LastLogonDate is $null)
-        ($_.LastLogonDate -eq $null) -or ($_.LastLogonDate -lt $CutoffDate)
+        (($_.LastLogonDate -eq $null) -or ($_.LastLogonDate -lt $CutoffDate)) -and
+        # Exclude shared mailboxes
+        ($_.msExchRecipientTypeDetails -ne 34359738368)
     }
 
+$emailableUsers = $deletableUsers | Select-Object SamAccountName
 
+foreach($user in $emailableUsers)
+{
+    Write-Output $user
+}
 
 # DELETE USERS
 
+if(!$safeMode)
+{
+
+}
 
 
 
@@ -27,7 +45,7 @@ $date = Get-Date -Format "MM/dd/yyyy"
 # Define ACS SMTP settings
 $smtpServer = "smtp.azurecomm.net"
 $smtpPort = 587
-$username = "" # Fill in
+$username = "CPS-ACS-Platform.f436e17d-a4a8-470c-a740-484de5452112.00dd0d1d-d7e6-4338-ac51-565339c7088c" 
 
 # Get Password from Key Vault
 # Get the AuthToken which we will use to access secrets within the Key Vault (the key vault contains the service account password)
@@ -53,9 +71,9 @@ catch {
 
 # Email details
 $from = "donotreply@notify.cps.gov.uk"
-$to = "" # CGI contact to be confirmed
+$to = "tom.schoolar@cps.gov.uk" # CGI contact to be confirmed
 $subject = "CPS User account deletions "+$date
-$body = "CPS User account deletions" + "`n" + $deletableUsers
+$body = "CPS User account deletions" + "`n" + $emailableUsers
 
 # Create credentials object
 $securePassword = ConvertTo-SecureString $password.value -AsPlainText -Force
