@@ -1,6 +1,64 @@
-$domain = Get-ADGroupMember -Server "cps.gov.uk" -Identity "Domain Admins" -Recursive
+Import-Module ActiveDirectory -ErrorAction Stop
 
-$domainstring = ($domain.Name) -join "`n"
+$Server = "cps.gov.uk"
+$TargetGroup = "Domain Admins"
+
+# Hashtable: group DN -> list of direct members
+$groupMembers = @{}
+
+# Hashtable: user DN -> the first group (lowest-level) that links them to Domain Admins
+$userSourceGroup = @{}
+
+# Queue of group DNs to process
+$queue = New-Object System.Collections.Queue
+
+# Start with Domain Admins
+$startGroup = Get-ADGroup -Server $Server -Identity $TargetGroup
+$queue.Enqueue(@{
+    GroupDN = $startGroup.DistinguishedName
+    GroupName = $startGroup.Name
+})
+
+# Traverse nested groups
+while ($queue.Count -gt 0) {
+    $current = $queue.Dequeue()
+    $groupDN = $current.GroupDN
+    $groupName = $current.GroupName
+
+    if (-not $groupMembers.ContainsKey($groupDN)) {
+        $members = Get-ADGroupMember -Server $Server -Identity $groupDN -ErrorAction SilentlyContinue
+        $groupMembers[$groupDN] = $members
+    } else {
+        $members = $groupMembers[$groupDN]
+    }
+
+    foreach ($member in $members) {
+        switch ($member.ObjectClass) {
+            'user' {
+                if (-not $userSourceGroup.ContainsKey($member.DistinguishedName)) {
+                    $userSourceGroup[$member.DistinguishedName] = $groupName
+                }
+            }
+            'group' {
+                $queue.Enqueue(@{
+                    GroupDN = $member.DistinguishedName
+                    GroupName = $member.Name
+                })
+            }
+        }
+    }
+}
+
+# Format results into a string
+$resultLines = foreach ($userDN in $userSourceGroup.Keys) {
+    $user = Get-ADUser -Server $Server -Identity $userDN -Properties SamAccountName -ErrorAction SilentlyContinue
+    if ($user) {
+        "$($user.SamAccountName) - via $($userSourceGroup[$userDN])"
+    }
+}
+
+# Output to console
+$domainstring = $resultLines -join "`n"
 
 $enterprise = Get-ADGroupMember -Server "cps.gov.uk" -Identity "Enterprise Admins" -Recursive
 
