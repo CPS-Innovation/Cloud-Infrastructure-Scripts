@@ -1,7 +1,7 @@
 Import-Module ActiveDirectory -ErrorAction Stop
 
-$Server = "cps.gov.uk"
-$TargetGroup = "Domain Admins"
+$server = "cps.gov.uk"
+$targetGroup = "Domain Admins"
 
 # Hashtable: group DN -> list of direct members
 $groupMembers = @{}
@@ -13,7 +13,7 @@ $userSourceGroup = @{}
 $queue = New-Object System.Collections.Queue
 
 # Start with Domain Admins
-$startGroup = Get-ADGroup -Server $Server -Identity $TargetGroup
+$startGroup = Get-ADGroup -Server $server -Identity $targetGroup
 $queue.Enqueue(@{
     GroupDN = $startGroup.DistinguishedName
     GroupName = $startGroup.Name
@@ -26,7 +26,7 @@ while ($queue.Count -gt 0) {
     $groupName = $current.GroupName
 
     if (-not $groupMembers.ContainsKey($groupDN)) {
-        $members = Get-ADGroupMember -Server $Server -Identity $groupDN -ErrorAction SilentlyContinue
+        $members = Get-ADGroupMember -Server $server -Identity $groupDN -ErrorAction SilentlyContinue
         $groupMembers[$groupDN] = $members
     } else {
         $members = $groupMembers[$groupDN]
@@ -49,24 +49,29 @@ while ($queue.Count -gt 0) {
     }
 }
 
+$domainAdminTable = @()
+
 # Format results into a string
-$resultLines = foreach ($userDN in $userSourceGroup.Keys) {
-    $user = Get-ADUser -Server $Server -Identity $userDN -Properties SamAccountName -ErrorAction SilentlyContinue
-    if ($user) {
-        "$($user.SamAccountName) - via $($userSourceGroup[$userDN])"
+foreach ($userDN in $userSourceGroup.Keys) {
+    $user = Get-ADUser -Server $server -Identity $userDN -Properties SamAccountName, Enabled -ErrorAction SilentlyContinue
+
+    $domainAdminTable += [PSCustomObject]@{
+        SamAccountName = $user.SamAccountName
+        Enabled        = $user.Enabled
+        SourceGroup         = $userSourceGroup[$userDN]
     }
 }
 
 # Output to console
-$domainstring = $resultLines -join "`n"
+$domainString = ($domainAdminTable | Format-Table -AutoSize | Out-String)
 
 $enterprise = Get-ADGroupMember -Server "cps.gov.uk" -Identity "Enterprise Admins" -Recursive
 
-$enterprisestring = ($enterprise.Name) -join "`n"
+$enterpriseString = ($enterprise.Name) -join "`n"
 
 $schema = Get-ADGroupMember -Server "cps.gov.uk" -Identity "Schema Admins" -Recursive
 
-$schemastring = ($schema.Name) -join "`n"
+$schemaString = ($schema.Name) -join "`n"
 
 
 $date = Get-Date -Format "MM/dd/yyyy"
@@ -79,8 +84,8 @@ $username = "CPS-ACS-Platform.3c1da28c-0b97-4c23-82f0-25c62adbd298.00dd0d1d-d7e6
 # Get Password from Key Vault
 #Get the AuthToken which we will use to access secrets within the Key Vault (the key vault contains the service account password)
 try {
-  $Response = Invoke-RestMethod -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -Method GET -Headers @{Metadata="true"}
-  $KeyVaultToken = $Response.access_token
+  $response = Invoke-RestMethod -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -Method GET -Headers @{Metadata="true"}
+  $keyVaultToken = $response.access_token
 }
 catch {
     LogError -message "Failed to recieve AuthToken for Azure Key Vault"
@@ -91,7 +96,7 @@ catch {
 #Use the AuthToken to access the service account password from the Key Vault
 #Note: The FQDN used in this request is currently configured within the host file of the server
 try {
-    $password = (Invoke-RestMethod -Uri https://kv-managementsecrets.vault.azure.net/secrets/DomainAdminReports-SMTP?api-version=2016-10-01 -Method GET -Headers @{Authorization="Bearer $KeyVaultToken"})
+    $password = (Invoke-RestMethod -Uri https://kv-managementsecrets.vault.azure.net/secrets/DomainAdminReports-SMTP?api-version=2016-10-01 -Method GET -Headers @{Authorization="Bearer $keyVaultToken"})
 }
 catch {
     LogError -message ("Failed to obtain secret - " + $_.Exception.StatusCode)
@@ -102,7 +107,7 @@ catch {
 $from = "donotreply@notify.cps.gov.uk"
 $to = "cpscybersecurityteam@cps.gov.uk"
 $subject = "Domain Admins "+$date
-$body = "Domain Admins: (Count: " + $domain.Count + ")" + "`n" + $domainstring + "`n`n" + "Enterpise Admins: " + "`n" + $enterprisestring + "`n`n" + "Schema Admins: " + "`n" + $schemastring
+$body = "Domain Admins: (Count: " + $($userSourceGroup.Keys.Count) + ")" + "`n" + $domainString + "`n`n" + "Enterpise Admins: " + "`n" + $enterpriseString + "`n`n" + "Schema Admins: " + "`n" + $schemaString
 
 # Create credentials object
 $securePassword = ConvertTo-SecureString $password.value -AsPlainText -Force
