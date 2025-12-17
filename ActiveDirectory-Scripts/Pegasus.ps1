@@ -6,10 +6,11 @@
 #                                               #
 #################################################
 
+$groupName = "CPS NetApp Storage DID"
 
 $didUsers = get-aduser -filter {(Department -like '*DID*') -and (Enabled -eq $True) } -properties SamAccountName
 
-$currentUsersInAccessGroup = Get-ADGroupMember "CPS NetApp Storage DID" | Select-Object SamAccountName
+$currentUsersInAccessGroup = Get-ADGroupMember $groupName | Select-Object SamAccountName
 $desiredUsersInAccessGroup = $didUsers
 
 $usersToBeAdded     = $desiredUsersInAccessGroup | Where-Object { $_.SamAccountName -notin $currentUsersInAccessGroup.SamAccountName }
@@ -20,7 +21,7 @@ if($usersToBeAdded -ne $null)
 {
     Write-Host "Users to be added - Count $($usersToBeAdded.Count)"
     Write-Host $usersToBeAdded
-    Add-ADGroupMember    "CPS NetApp Storage DID" -Members $usersToBeAdded
+    Add-ADGroupMember $groupName -Members $usersToBeAdded
 }
 else 
 {
@@ -31,7 +32,7 @@ if($usersToBeRemoved -ne $null)
 {
     Write-Host "Users to be removed - Count $($usersToBeRemoved.Count)"
     Write-Host $usersToBeRemoved
-    Remove-ADGroupMember "CPS NetApp Storage DID" -Members $usersToBeRemoved -Confirm:$false
+    Remove-ADGroupMember $groupName -Members $usersToBeRemoved -Confirm:$false
 }
 else 
 {
