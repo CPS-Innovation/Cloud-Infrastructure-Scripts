@@ -1,5 +1,5 @@
 #################################################
-#      Name: Pegasus                            #
+#      Name: DyanmicGroupManager                #
 #      Author: Tom Schoolar                     #
 #      Date: 17/12/2025                         #
 #      Version: 1.0                             #
