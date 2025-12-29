@@ -65,6 +65,10 @@ foreach ($userDN in $userSourceGroup.Keys) {
 # Output to console
 $domainString = ($domainAdminTable | Format-Table -AutoSize | Out-String)
 
+$domainCSV = $domainAdminTable |
+    ConvertTo-Csv -NoTypeInformation |
+    Out-String
+
 $enterprise = Get-ADGroupMember -Server "cps.gov.uk" -Identity "Enterprise Admins" -Recursive
 
 $enterpriseString = ($enterprise.Name) -join "`n"
@@ -105,9 +109,9 @@ catch {
 
 # Email details
 $from = "donotreply@notify.cps.gov.uk"
-$to = "cpscybersecurityteam@cps.gov.uk"
+$to = "tom.schoolar@cps.gov.uk"
 $subject = "Domain Admins "+$date
-$body = "Domain Admins: (Count: " + $($userSourceGroup.Keys.Count) + ")" + "`n" + $domainString + "`n`n" + "Enterpise Admins: " + "`n" + $enterpriseString + "`n`n" + "Schema Admins: " + "`n" + $schemaString
+$body = "Enterpise Admins: " + "`n" + $enterpriseString + "`n`n" + "Schema Admins: " + "`n" + $schemaString
 
 # Create credentials object
 $securePassword = ConvertTo-SecureString $password.value -AsPlainText -Force
@@ -115,6 +119,26 @@ $credentials = New-Object System.Management.Automation.PSCredential($username, $
 
 # Create the mail message
 $message = New-Object System.Net.Mail.MailMessage $from, $to, $subject, $body
+
+
+# Convert CSV string to bytes
+$domainBytes = [System.Text.Encoding]::UTF8.GetBytes($domainCSV)
+
+# Create memory stream
+$stream = New-Object System.IO.MemoryStream
+$stream.Write($domainBytes, 0, $domainBytes.Length)
+$stream.Position = 0
+
+# Create attachment
+$attachment = New-Object System.Net.Mail.Attachment(
+    $stream,
+    "DomainAdmins.csv",
+    "text/csv"
+)
+
+# Add attachment
+$message.Attachments.Add($attachment)
+
 $message.IsBodyHtml = $false
 
 # Create SMTP client and send
@@ -128,3 +152,7 @@ try {
 } catch {
     Write-Error "Failed to send email: $_"
 }
+
+# Cleanup
+$attachment.Dispose()
+$stream.Dispose()
