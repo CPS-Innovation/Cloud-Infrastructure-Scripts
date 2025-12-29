@@ -1,83 +1,5 @@
 Import-Module ActiveDirectory -ErrorAction Stop
 
-$server = "cps.gov.uk"
-$targetGroup = "Domain Admins"
-
-# Hashtable: group DN -> list of direct members
-$groupMembers = @{}
-
-# Hashtable: user DN -> the first group (lowest-level) that links them to Domain Admins
-$userSourceGroup = @{}
-
-# Queue of group DNs to process
-$queue = New-Object System.Collections.Queue
-
-# Start with Domain Admins
-$startGroup = Get-ADGroup -Server $server -Identity $targetGroup
-$queue.Enqueue(@{
-    GroupDN = $startGroup.DistinguishedName
-    GroupName = $startGroup.Name
-})
-
-# Traverse nested groups
-while ($queue.Count -gt 0) {
-    $current = $queue.Dequeue()
-    $groupDN = $current.GroupDN
-    $groupName = $current.GroupName
-
-    if (-not $groupMembers.ContainsKey($groupDN)) {
-        $members = Get-ADGroupMember -Server $server -Identity $groupDN -ErrorAction SilentlyContinue
-        $groupMembers[$groupDN] = $members
-    } else {
-        $members = $groupMembers[$groupDN]
-    }
-
-    foreach ($member in $members) {
-        switch ($member.ObjectClass) {
-            'user' {
-                if (-not $userSourceGroup.ContainsKey($member.DistinguishedName)) {
-                    $userSourceGroup[$member.DistinguishedName] = $groupName
-                }
-            }
-            'group' {
-                $queue.Enqueue(@{
-                    GroupDN = $member.DistinguishedName
-                    GroupName = $member.Name
-                })
-            }
-        }
-    }
-}
-
-$domainAdminTable = @()
-
-# Format results into a string
-foreach ($userDN in $userSourceGroup.Keys) {
-    $user = Get-ADUser -Server $server -Identity $userDN -Properties SamAccountName, Enabled -ErrorAction SilentlyContinue
-
-    $domainAdminTable += [PSCustomObject]@{
-        SamAccountName = $user.SamAccountName
-        Enabled        = $user.Enabled
-        SourceGroup         = $userSourceGroup[$userDN]
-    }
-}
-
-# Output to console
-$domainString = ($domainAdminTable | Format-Table -AutoSize | Out-String)
-
-$domainCSV = $domainAdminTable |
-    ConvertTo-Csv -NoTypeInformation |
-    Out-String
-
-$enterprise = Get-ADGroupMember -Server "cps.gov.uk" -Identity "Enterprise Admins" -Recursive
-
-$enterpriseString = ($enterprise.Name) -join "`n"
-
-$schema = Get-ADGroupMember -Server "cps.gov.uk" -Identity "Schema Admins" -Recursive
-
-$schemaString = ($schema.Name) -join "`n"
-
-
 $date = Get-Date -Format "MM/dd/yyyy"
 
 # Define ACS SMTP settings
@@ -119,27 +41,130 @@ $credentials = New-Object System.Management.Automation.PSCredential($username, $
 
 # Create the mail message
 $message = New-Object System.Net.Mail.MailMessage $from, $to, $subject, $body
-
-
-# Convert CSV string to bytes
-$domainBytes = [System.Text.Encoding]::UTF8.GetBytes($domainCSV)
-
-# Create memory stream
-$stream = New-Object System.IO.MemoryStream
-$stream.Write($domainBytes, 0, $domainBytes.Length)
-$stream.Position = 0
-
-# Create attachment
-$attachment = New-Object System.Net.Mail.Attachment(
-    $stream,
-    "DomainAdmins.csv",
-    "text/csv"
-)
-
-# Add attachment
-$message.Attachments.Add($attachment)
-
 $message.IsBodyHtml = $false
+
+$streams     = @()
+$attachments = @()
+
+$server = "cps.gov.uk"
+
+$targetGroups = @( "Domain Admins", "Enterprise Admins", "Schema Admins" )
+
+
+foreach($targetGroup in $targetGroups)
+{
+    if($targetGroup -eq "Domain Admins")
+    {
+        # Hashtable: group DN -> list of direct members
+        $groupMembers = @{}
+
+        # Hashtable: user DN -> the first group (lowest-level) that links them to Domain Admins
+        $userSourceGroup = @{}
+
+        # Queue of group DNs to process
+        $queue = New-Object System.Collections.Queue
+
+        # Start with Domain Admins
+        $startGroup = Get-ADGroup -Server $server -Identity $targetGroup
+        $queue.Enqueue(@{
+            GroupDN = $startGroup.DistinguishedName
+            GroupName = $startGroup.Name
+        })
+
+        # Traverse nested groups
+        while ($queue.Count -gt 0) {
+            $current = $queue.Dequeue()
+            $groupDN = $current.GroupDN
+            $groupName = $current.GroupName
+
+            if (-not $groupMembers.ContainsKey($groupDN)) {
+                $members = Get-ADGroupMember -Server $server -Identity $groupDN -ErrorAction SilentlyContinue
+                $groupMembers[$groupDN] = $members
+            } else {
+                $members = $groupMembers[$groupDN]
+            }
+
+            foreach ($member in $members) {
+                switch ($member.ObjectClass) {
+                    'user' {
+                        if (-not $userSourceGroup.ContainsKey($member.DistinguishedName)) {
+                            $userSourceGroup[$member.DistinguishedName] = $groupName
+                        }
+                    }
+                    'group' {
+                        $queue.Enqueue(@{
+                            GroupDN = $member.DistinguishedName
+                            GroupName = $member.Name
+                        })
+                    }
+                }
+            }
+        }
+
+        $domainAdminTable = @()
+
+        # Format results into a string
+        foreach ($userDN in $userSourceGroup.Keys) {
+            $user = Get-ADUser -Server $server -Identity $userDN -Properties SamAccountName, Enabled -ErrorAction SilentlyContinue
+
+            $domainAdminTable += [PSCustomObject]@{
+                SamAccountName = $user.SamAccountName
+                Enabled        = $user.Enabled
+                SourceGroup    = $userSourceGroup[$userDN]
+            }
+        }
+
+        $csv = $domainAdminTable | ConvertTo-Csv -NoTypeInformation | Out-String
+
+        # Convert CSV string to bytes
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($csv)
+
+        # Create memory stream
+        $stream = New-Object System.IO.MemoryStream
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Position = 0
+
+        $roleReplaced = $targetGroup.replace(" ","_")
+	    $fileName = $roleReplaced + ".csv"
+
+        # Create attachment
+        $attachment = New-Object System.Net.Mail.Attachment(
+            $stream,
+            $fileName,
+            "text/csv"
+        )
+
+        # Add attachment
+        $message.Attachments.Add($attachment)
+    }
+    else {
+        $data = Get-ADGroupMember -Server "cps.gov.uk" -Identity $targetGroup -Recursive
+
+        $csv = $data | ConvertTo-Csv -NoTypeInformation | Out-String
+
+        # Convert CSV string to bytes
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($csv)
+
+        # Create memory stream
+        $stream = New-Object System.IO.MemoryStream
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Position = 0
+
+        $roleReplaced = $targetGroup.replace(" ","_")
+	    $fileName = $roleReplaced + ".csv"
+
+        # Create attachment
+        $attachment = New-Object System.Net.Mail.Attachment(
+            $stream,
+            $fileName,
+            "text/csv"
+        )
+
+        # Add attachment
+        $message.Attachments.Add($attachment)
+    }
+}
+
 
 # Create SMTP client and send
 $smtp = New-Object System.Net.Mail.SmtpClient($smtpServer, $smtpPort)
@@ -152,7 +177,17 @@ try {
 } catch {
     Write-Error "Failed to send email: $_"
 }
+finally {
+    # Dispose MailMessage first (releases attachments)
+    if ($message) { $message.Dispose() }
 
-# Cleanup
-$attachment.Dispose()
-$stream.Dispose()
+    # Dispose attachments
+    foreach ($attachment in $attachments) {
+        $attachment.Dispose()
+    }
+
+    # Dispose streams
+    foreach ($stream in $streams) {
+        $stream.Dispose()
+    }
+}
