@@ -1,19 +1,16 @@
+param vnetName string
+param routeTableName string
+param pipName string
+param firewallAddress string
+param vnetAddressRange string
+param nicName string
+
 param location string = resourceGroup().location
-param vnetName string = 'myVNet'
-param subnetName string = 'mySubnet'
-param routeTableName string = 'myRouteTable'
-param virtualApplianceIp string = '10.0.2.4'
-param pipName string = 'myPIP'
+param subnetName string = 'default'
 
-param dnsServers array = [
-  '10.1.1.4'
-  '10.1.1.5'
-]
+param dnsServers array
 
-// -----------------------------
-// Create Route Table
-// -----------------------------
-resource myRouteTable 'Microsoft.Network/routeTables@2022-09-01' = {
+resource routeTable 'Microsoft.Network/routeTables@2022-09-01' = {
   name: routeTableName
   location: location
   properties: {
@@ -22,25 +19,22 @@ resource myRouteTable 'Microsoft.Network/routeTables@2022-09-01' = {
       {
         name: 'default-route-to-appliance'
         properties: {
-          addressPrefix: '0.0.0.0/0'
+          addressPrefix: '10.0.0.0/8'
           nextHopType: 'VirtualAppliance'
-          nextHopIpAddress: virtualApplianceIp
+          nextHopIpAddress: firewallAddress 
         }
       }
     ]
   }
 }
 
-// -----------------------------
-// Create VNet + Subnet with DNS and Route Table
-// -----------------------------
-resource myVNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
+resource VNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
   name: vnetName
   location: location
   properties: {
     addressSpace: {
       addressPrefixes: [
-        '10.0.0.0/16'
+        vnetAddressRange
       ]
     }
     dhcpOptions: {
@@ -50,9 +44,9 @@ resource myVNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
       {
         name: subnetName
         properties: {
-          addressPrefix: '10.0.1.0/24'
+          addressPrefix: vnetAddressRange
           routeTable: {
-            id: myRouteTable.id
+            id: routeTable.id
           }
         }
       }
@@ -71,5 +65,23 @@ resource publicIP 'Microsoft.Network/publicIPAddresses@2022-09-01' = {
   }
 }
 
-
-
+resource nic 'Microsoft.Network/networkInterfaces@2022-09-01' = {
+  name: nicName
+  location: location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          subnet: {
+            id: VNet.properties.subnets[0].id
+          }
+          privateIPAllocationMethod: 'Dynamic'
+          publicIPAddress: {
+            id: publicIP.id
+          }
+        }
+      }
+    ]
+  }
+}
