@@ -6,6 +6,9 @@ $newVnetAddress = "10.1.1.0/24"
 
 # Hub Network Variables
 
+$projectManager = "TomSchoolar"
+$startDate = "2026-12-30"
+
 $location = $location.ToLower()
 $locationInital = $location[2]
 
@@ -60,6 +63,8 @@ New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateFil
     -dnsServers $dnsServers `
     -nicName $nicName `
     -vnetAddressRange $newVnetAddress `
+    -startDate $startDate `
+    -pm $projectManager `
     -Mode Incremental #Complete
 
 
