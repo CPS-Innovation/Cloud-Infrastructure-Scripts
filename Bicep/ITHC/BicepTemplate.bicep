@@ -40,6 +40,7 @@ resource routeTable 'Microsoft.Network/routeTables@2022-09-01' = {
 resource VNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
   name: vnetName
   location: location
+  tags: tags
   properties: {
     addressSpace: {
       addressPrefixes: [
@@ -65,6 +66,7 @@ resource VNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
 
 resource publicIP 'Microsoft.Network/publicIPAddresses@2022-09-01' = {
   name: pipName
+  tags: tags
   location: location
   sku: {
     name: 'Standard'
@@ -76,6 +78,7 @@ resource publicIP 'Microsoft.Network/publicIPAddresses@2022-09-01' = {
 
 resource nic 'Microsoft.Network/networkInterfaces@2022-09-01' = {
   name: nicName
+  tags: tags
   location: location
   properties: {
     ipConfigurations: [
@@ -100,6 +103,7 @@ param disks_TESTVM_OsDisk_1_df0b103f6d824afc9916e908a0213f8e_name string = 'TEST
 resource disks_TESTVM_OsDisk_1_df0b103f6d824afc9916e908a0213f8e_name_resource 'Microsoft.Compute/disks@2025-01-02' = {
   name: disks_TESTVM_OsDisk_1_df0b103f6d824afc9916e908a0213f8e_name
   location: 'uksouth'
+  tags: tags
   sku: {
     name: 'Premium_LRS'
     tier: 'Premium'
@@ -141,6 +145,7 @@ param adminPassword string
 
 resource VMMachine 'Microsoft.Compute/virtualMachines@2024-11-01' = {
   name: 'testvm2'
+  tags: tags
   location: 'uksouth'
   plan: {
     name: 'kali-2025-4'
