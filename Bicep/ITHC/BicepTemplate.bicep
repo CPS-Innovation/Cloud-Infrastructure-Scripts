@@ -4,9 +4,20 @@ param pipName string
 param firewallAddress string
 param vnetAddressRange string
 param nicName string
+param externalAccessIP string
+param dnsName string
 
 param startDate string
 param pm string
+
+param osDiskName string
+
+@secure()
+param adminPassword string
+
+param adminUsername string = 'azureuser'
+
+param vmName string
 
 var tags = {
   ProjectManager: pm
@@ -18,6 +29,57 @@ param subnetName string = 'default'
 
 param dnsServers array
 
+param nsgName string
+
+resource nsg 'Microsoft.Network/networkSecurityGroups@2023-04-01' = {
+  name: nsgName
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'Allow-SSH-From-SIPA'
+        properties: {
+          priority: 110
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '22'
+          sourceAddressPrefix: '51.11.141.254'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Allow-SSH-From-SIPA2'
+        properties: {
+          priority: 105
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '22'
+          sourceAddressPrefix: '52.142.147.85'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Allow-SSH-From-External'
+        properties: {
+          priority: 100
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '22'
+          sourceAddressPrefix: externalAccessIP
+          destinationAddressPrefix: '*'
+        }
+      }
+    ]
+  }
+}
+
 resource routeTable 'Microsoft.Network/routeTables@2022-09-01' = {
   name: routeTableName
   location: location
@@ -26,7 +88,7 @@ resource routeTable 'Microsoft.Network/routeTables@2022-09-01' = {
     disableBgpRoutePropagation: false
     routes: [
       {
-        name: 'default-route-to-appliance'
+        name: 'default-route-to-hub'
         properties: {
           addressPrefix: '10.0.0.0/8'
           nextHopType: 'VirtualAppliance'
@@ -58,6 +120,9 @@ resource VNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
           routeTable: {
             id: routeTable.id
           }
+          networkSecurityGroup: {
+            id: nsg.id
+          }
         }
       }
     ]
@@ -72,7 +137,10 @@ resource publicIP 'Microsoft.Network/publicIPAddresses@2022-09-01' = {
     name: 'Standard'
   }
   properties: {
-    publicIPAllocationMethod: 'Static' // Standard requires Static or leave as Dynamic
+    publicIPAllocationMethod: 'Static'
+    dnsSettings: {
+      domainNameLabel: dnsName
+    }
   }
 }
 
@@ -98,53 +166,8 @@ resource nic 'Microsoft.Network/networkInterfaces@2022-09-01' = {
   }
 }
 
-param disks_TESTVM_OsDisk_1_df0b103f6d824afc9916e908a0213f8e_name string = 'TESTVM_OsDisk_1_df0b103f6d824afc9916e908a0213f8edvv'
-
-resource disks_TESTVM_OsDisk_1_df0b103f6d824afc9916e908a0213f8e_name_resource 'Microsoft.Compute/disks@2025-01-02' = {
-  name: disks_TESTVM_OsDisk_1_df0b103f6d824afc9916e908a0213f8e_name
-  location: 'uksouth'
-  tags: tags
-  sku: {
-    name: 'Premium_LRS'
-    tier: 'Premium'
-  }
-  properties: {
-    osType: 'Linux'
-    hyperVGeneration: 'V2'
-    purchasePlan: {
-      name: 'kali-2025-4'
-      publisher: 'kali-linux'
-      product: 'kali'
-    }
-    supportsHibernation: false
-    supportedCapabilities: {
-      diskControllerTypes: 'SCSI'
-      acceleratedNetwork: false
-      architecture: 'x64'
-    }
-    creationData: {
-      createOption: 'FromImage'
-      imageReference: {
-        id: '/Subscriptions/8587dc13-9243-4af2-94ef-d95428bad513/Providers/Microsoft.Compute/Locations/uksouth/Publishers/kali-linux/ArtifactTypes/VMImage/Offers/kali/Skus/kali-2025-4/Versions/2025.4.0'
-      }
-    }
-    diskSizeGB: 25
-    diskIOPSReadWrite: 120
-    diskMBpsReadWrite: 25
-    encryption: {
-      type: 'EncryptionAtRestWithPlatformKey'
-    }
-    networkAccessPolicy: 'AllowAll'
-    publicNetworkAccess: 'Enabled'
-    tier: 'P4'
-  }
-}
-
-@secure()
-param adminPassword string
-
-resource VMMachine 'Microsoft.Compute/virtualMachines@2024-11-01' = {
-  name: 'testvm2'
+resource VMMachineObject 'Microsoft.Compute/virtualMachines@2024-11-01' = {
+  name: vmName
   tags: tags
   location: 'uksouth'
   plan: {
@@ -168,7 +191,7 @@ resource VMMachine 'Microsoft.Compute/virtualMachines@2024-11-01' = {
       }
       osDisk: {
         osType: 'Linux'
-        name: 'testDisk'
+        name: osDiskName
         createOption: 'FromImage'
         caching: 'ReadWrite'
         managedDisk: {
@@ -181,8 +204,8 @@ resource VMMachine 'Microsoft.Compute/virtualMachines@2024-11-01' = {
       diskControllerType: 'SCSI'
     }
     osProfile: {
-      computerName: 'testvm2'
-      adminUsername: 'azureuser'
+      computerName: vmName
+      adminUsername: adminUsername
       adminPassword: adminPassword
       linuxConfiguration: {
         disablePasswordAuthentication: false
