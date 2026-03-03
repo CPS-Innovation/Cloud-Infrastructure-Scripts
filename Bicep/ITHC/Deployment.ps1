@@ -1,7 +1,10 @@
 # New Network Variables    
 $projectName = "Tom"
 $location = "UKSouth"   # "uksouth" or "ukwest"
-$newVnetAddress = "10.1.1.0/24"      
+$newVnetAddress = "10.1.1.0/24"     
+
+$externalAccessIP = "10.8.0.5" # CHANGE
+$dnsName = "tomtest"
 
 
 # Hub Network Variables
@@ -28,6 +31,7 @@ $defaultRouteName = "default"
 $newVnetName = "VNET$endBitOfName"
 $pipName = "PIP$endBitOfName"
 $nicName = "NIC$endBitOfName"
+$nsgName = "NSG$endBitOfName"
 
 $resourceGroupName = "RG$endBitOfName"
 
@@ -43,6 +47,10 @@ if($locationInital -eq "w")
     $firewallAddress = "10.8.16.4" #CHECK
     $dnsServers = '10.14.136.4','10.7.136.4' #IMPROVE
 }
+
+$vmName = "VM$endBitOfName"
+$osDiskName = "DSK$endBitOfName" + "-OS"
+
 
 $subscription = Get-AzSubscription -SubscriptionName $subscriptionName
 $subscriptionId = $subscription.Id
@@ -65,7 +73,9 @@ New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateFil
     -vnetAddressRange $newVnetAddress `
     -startDate $startDate `
     -pm $projectManager `
+    -vmName $vmName `
+    -osDiskName $osDiskName `
+    -nsgName $nsgName `
+    -externalAccessIP $externalAccessIP `
+    -dnsName $dnsName `
     -Mode Incremental #Complete
-
-
-
