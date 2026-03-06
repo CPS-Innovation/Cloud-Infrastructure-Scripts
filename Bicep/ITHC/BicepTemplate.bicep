@@ -8,20 +8,25 @@ param externalAccessIP string
 param dnsName string
 
 param startDate string
+param endDate string
 param pm string
 
 param osDiskName string
 
-@secure()
-param adminPassword string
+type user = {
+  adminUsername : string
+  @secure()
+  adminPassword : string
+}
 
-param adminUsername string = 'azureuser'
+param userProfile user
 
 param vmName string
 
 var tags = {
   ProjectManager: pm
   StartDate: startDate
+  EndDate: endDate
 }
 
 param location string = resourceGroup().location
@@ -126,6 +131,7 @@ resource VNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
         }
       }
     ]
+
   }
 }
 
@@ -205,8 +211,8 @@ resource VMMachineObject 'Microsoft.Compute/virtualMachines@2024-11-01' = {
     }
     osProfile: {
       computerName: vmName
-      adminUsername: adminUsername
-      adminPassword: adminPassword
+      adminUsername: userProfile.adminUsername
+      adminPassword: userProfile.adminPassword
       linuxConfiguration: {
         disablePasswordAuthentication: false
         patchSettings: {
