@@ -71,6 +71,10 @@ $userProfile = @{
 
 # switch
 
+$hubSubscription = Get-AzSubscription -SubscriptionName "ExpressRoute CLZ Hub (Prod)"
+
+Set-AzContext $hubSubscription.name
+
 $hubVnetResource = Get-AzResource -Name $hubVnetName
 $hubVnetResourceId = $hubVnetResource.ResourceId
 $remoteVnetId = $hubVnetResourceId
@@ -112,6 +116,8 @@ New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateFil
     -externalAccessIP $externalAccessIP `
     -dnsName $dnsName `
     -userProfile $userProfile `
+    -remoteVnetId $remoteVnetId ` 
+    -localPeeringName $localPeeringName `
     -Mode Incremental #Complete
 
 
