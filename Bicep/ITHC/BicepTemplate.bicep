@@ -10,6 +10,9 @@ param dnsName string
 param startDate string
 param endDate string
 param pm string
+param remoteVnetId string
+param localPeeringLinkName string
+
 
 param osDiskName string
 
@@ -135,6 +138,21 @@ resource VNet 'Microsoft.Network/virtualNetworks@2022-09-01' = {
   }
 }
 
+resource localVnetPeering 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2022-09-01' = {
+  name: localPeeringLinkName 
+  parent: VNet
+  properties: {
+    allowVirtualNetworkAccess: true
+    allowForwardedTraffic: true
+    allowGatewayTransit: false
+    useRemoteGateways: false
+    remoteVirtualNetwork: {
+      id: remoteVnetId
+    }
+  }
+}
+
+
 resource publicIP 'Microsoft.Network/publicIPAddresses@2022-09-01' = {
   name: pipName
   tags: tags
@@ -237,6 +255,24 @@ resource VMMachineObject 'Microsoft.Compute/virtualMachines@2024-11-01' = {
       bootDiagnostics: {
         enabled: true
       }
+    }
+  }
+}
+
+resource vmAccessExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
+  name: 'enablevmAccess'
+  parent: VMMachineObject 
+  location: location
+  properties: {
+    publisher: 'Microsoft.OSTCExtensions'
+    type: 'VMAccessForLinux'
+    typeHandlerVersion: '1.5'
+    autoUpgradeMinorVersion: true
+    settings: {
+      username: userProfile.adminUsername
+    }
+    protectedSettings: {
+      password: userProfile.adminPassword
     }
   }
 }
