@@ -116,8 +116,8 @@ New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateFil
     -externalAccessIP $externalAccessIP `
     -dnsName $dnsName `
     -userProfile $userProfile `
+    -localPeeringLinkName $localPeeringName `
     -remoteVnetId $remoteVnetId ` 
-    -localPeeringName $localPeeringName `
     -Mode Incremental #Complete
 
 
