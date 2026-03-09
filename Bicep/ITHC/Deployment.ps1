@@ -91,7 +91,7 @@ $subscriptionId = $subscription.Id
 Set-AzContext $subscriptionId
 
 # Deploy Resource Group
-New-AzSubscriptionDeployment -TemplateFile "C:\Temp\BicepTest.bicep" `
+New-AzSubscriptionDeployment -TemplateFile "C:\Temp\ResourceGroup.bicep" `
     -rgName $resourceGroupName `
     -startDate $startDate `
     -endDate $endDate `
@@ -99,7 +99,7 @@ New-AzSubscriptionDeployment -TemplateFile "C:\Temp\BicepTest.bicep" `
     -location $location
 
 # Deploy all other resources in that resource group
-New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateFile "C:\Temp\BicepTest2.bicep" `
+New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName -TemplateFile "C:\Temp\Resources.bicep" `
     -vnetName $newVnetName `
     -routeTableName $routeTableName `
     -pipName $pipName `
