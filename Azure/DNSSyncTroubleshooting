@@ -1,0 +1,22 @@
+Set-AzContext -SubscriptionId 50ee7c65-4012-43af-9da9-2231f1371670
+
+$ResourceGroupName = "rg-zones"
+
+Get-AzPrivateDnsZone -ResourceGroupName $ResourceGroupName | ForEach-Object {
+
+    $zone = $_
+
+    $vnetLinks = Get-AzPrivateDnsVirtualNetworkLink `
+        -ResourceGroupName $ResourceGroupName `
+        -ZoneName $zone.Name
+
+    $recordCount = (Get-AzPrivateDnsRecordSet `
+        -ResourceGroupName $ResourceGroupName `
+        -ZoneName $zone.Name).Count
+
+    [PSCustomObject]@{
+        ZoneName      = $zone.Name
+        VNetLinkCount = $vnetLinks.Count
+	      RecordCount = $recordCount
+    }
+} | Format-Table -AutoSize
